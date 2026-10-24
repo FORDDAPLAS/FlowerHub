@@ -1,0 +1,495 @@
+local print = function() end
+local warn  = function() end
+_G.TT3InvisAuto = false
+_G.TT3AutoKickOnSteal = false
+_G.TT3AutoBuy = false
+if _G.TT3StealMode == nil then _G.TT3StealMode = "priority" end
+if _G.TT3AutoTP == nil then _G.TT3AutoTP = true end
+if _G.TPDirectlyToPet == nil then _G.TPDirectlyToPet = true end
+
+if not game:IsLoaded() then game.Loaded:Wait() end
+
+-- LISTE PRIORITE Flower Hub: ordre repris de la version anterior.
+-- A ordem ativa e o RESET sao sincronizados depois do carregamento do JSON.
+local _FLOWER_PRIORITY_ORDER = {
+        "Headless Horseman", "Strawberry Elephant", "Skibidi Toilet",
+        "Meowl", "John Pork", "Ginger Gerat",
+        "Bunny and Eggy", "Love Love Bear", "Ketupat Bros",
+        "Antonio", "Signore Carapace", "Arcadragon",
+        "La Supreme Combinasion", "Fishino Clownino", "Tirilikalika Tirilikalako",
+        "Grabatron", "Polaroidini", "Rico Dinero",
+        "Jolly Jolly Sahur", "Dug dug dug", "Los Dragons",
+        "Hydra Bunny", "Kraken", "Venuspino",
+        "Dragon Gingerini", "Griffin", "Dragon Aquanini",
+        "Dragon Cannelloni", "Hydra Dragon Cannelloni", "Moby Bros",
+        "Cooki and Milki", "Pancake and Syrup", "Los Secret Combinasionas",
+        "Hydra Serpent", "La Casa Boo", "Los Admins",
+        "Duggy Bros", "Gold and Diamond", "Sammyni Cakini",
+        "S'more Serat", "Fragrama and Chocrama", "Los Sekolahs",
+        "La Craft Machine", "Los Hackers", "Los Chillis",
+        "Rubiko and Kubiko", "Rubrikiko", "Quackini Snackini",
+        "Examen Bros", "Popcuru and Fizzuru", "Bumbatron",
+        "Kalika Bros", "Reinito Sleighito", "Rosey and Teddy",
+        "Cerberus", "Foxini Lanternini", "Boppin Bunny",
+        "Spooky and Pumpky", "Festive 67", "Capitano Moby",
+        "Gym Bros", "Money Money Bros", "Pizza and Ranch",
+        "Burguro and Fryuro", "Cash or Card", "Garama and Madundung",
+}
+_G.TT3PriVersion = _G.TT3PriVersion or 0
+if type(_G.TT3PriorityDefault) ~= "table" then _G.TT3PriorityDefault = {} end
+table.clear(_G.TT3PriorityDefault)
+for i, name in ipairs(_FLOWER_PRIORITY_ORDER) do _G.TT3PriorityDefault[i] = name end
+if type(_G.SHARED_PRIORITY_ITEMS) ~= "table" then _G.SHARED_PRIORITY_ITEMS = {} end
+if #_G.SHARED_PRIORITY_ITEMS == 0 then
+    for i, name in ipairs(_FLOWER_PRIORITY_ORDER) do _G.SHARED_PRIORITY_ITEMS[i] = name end
+end
+
+-- LISTE PRIORITE MUTATIONS: meme systeme que la priority brainrot mais pour les
+-- mutations. index 1 = priorite MAX (en HAUT de la liste = Crystal), derniere =
+-- priorite MIN (en BAS = Normal). Sert de 2e critere de tri (apres le nom du
+-- brainrot, avant le MPS). _G.TT3MutVersion invalide le cache a chaque modif.
+_G.TT3MutVersion = _G.TT3MutVersion or 0
+if type(_G.TT3MutationDefault) ~= "table" then
+    _G.TT3MutationDefault = {
+        "Crystal", "Phantom", "Cyber", "Rainbow", "Divine", "Cursed",
+        "Radioactive", "Yinyang", "Galaxy", "Lava", "Candy", "Bloodrot",
+        "Diamond", "Gold", "Normal",
+    }
+end
+if type(_G.SHARED_MUTATION_ITEMS) ~= "table" then
+    _G.SHARED_MUTATION_ITEMS = {}
+    for i = 1, #_G.TT3MutationDefault do _G.SHARED_MUTATION_ITEMS[i] = _G.TT3MutationDefault[i] end
+end
+
+if LPH_OBFUSCATED == nil then
+    local env = getfenv()
+    env["LPH_NO_" .. "VIRTUALIZE"] = function(...) return ... end
+    env["LPH_JIT_" .. "MAX"]       = function(...) return ... end
+end
+
+do
+    local _HS = game:GetService("HttpService")
+    local _TS = game:GetService("TeleportService")
+    local fileData, tpData
+    if readfile then
+        pcall(function()
+            local raw = readfile("SideTP.json")
+            if type(raw) == "string" and #raw > 0 then fileData = _HS:JSONDecode(raw) end
+        end)
+    end
+    pcall(function()
+        local td = _TS:GetLocalPlayerTeleportData()
+        if td and td.SideTP then tpData = td.SideTP end
+    end)
+    local merged = {}
+    if type(tpData) == "table" then for k, v in pairs(tpData) do merged[k] = v end end
+    if type(fileData) == "table" then for k, v in pairs(fileData) do merged[k] = v end end
+
+    if type(merged.tpDelay) == "number" then _G._stp_tpDelay = merged.tpDelay end
+    if type(merged.tpVelocity) == "number" then _G.TPVelocity = math.clamp(merged.tpVelocity, 200, 750) end
+    if type(merged.climbSpeed) == "number" then _G.TT3Climb = math.clamp(merged.climbSpeed, 100, 250) end
+    if type(merged.cframeSpeed) == "number" then _G.TT3CFrameSpeed = math.clamp(merged.cframeSpeed, 100, 900) end
+    if type(merged.walkSpeed) == "number" then _G.TT3WalkSpeed = math.clamp(merged.walkSpeed, 16, 22) end
+    if type(merged.carpetTool) == "string" then _G.TT3CarpetTool = merged.carpetTool end
+    if type(merged.landingDelay) == "number" then _G.LandingDelay = math.clamp(merged.landingDelay, 0.05, 0.75) end
+    if type(merged.closeSpeed) == "number" then _G.TT3CloseSpeed = math.clamp(merged.closeSpeed, 20, 400) end
+    if type(merged.tpKey) == "string" then _G._stp_tpKeyName = merged.tpKey end
+    if type(merged.nearestKey) == "string" then _G.TT3NearestKey = merged.nearestKey end
+    if type(merged.prioritySoundID) == "string" then _G.TT3PrioritySoundID = merged.prioritySoundID end
+    -- MODE STEAL: toujours PRIORITY au lancement. On ignore volontairement
+    -- merged.stealMode ("nearest" restait colle d une session a l autre).
+    _G.TT3StealMode = "priority"
+    _G._stealUserOff = false
+    -- Delay de 3s antes do TP automatico (padrao). Min Gen TP em milhoes (0 = desligado).
+    if _G._stp_tpDelay == nil then _G._stp_tpDelay = 1.005 end
+    if type(merged.minGenTP) == "number" then _G.TT3MinGenTP = math.clamp(merged.minGenTP, 0, 1000) end
+    if _G.TT3MinGenTP == nil then _G.TT3MinGenTP = 0 end
+    -- LISTE PRIORITE perso (si l utilisateur l a editee): remplace la liste
+    -- active EN PLACE (meme reference), et bump la version pour le cache.
+    if type(merged.priorityList) == "table" then
+        local clean = {}
+        for _, v in ipairs(merged.priorityList) do
+            if type(v) == "string" and v ~= "" then clean[#clean + 1] = v end
+        end
+        if #clean > 0 then
+            local L = _G.SHARED_PRIORITY_ITEMS
+            table.clear(L)
+            for i = 1, #clean do L[i] = clean[i] end
+            _G.TT3PriVersion = _G.TT3PriVersion + 1
+        end
+    end
+    -- liste par defaut perso (definie via IMPORT) -> sert au bouton RESET
+    if type(merged.priorityDefault) == "table" then
+        local d = {}
+        for _, v in ipairs(merged.priorityDefault) do
+            if type(v) == "string" and v ~= "" then d[#d + 1] = v end
+        end
+        if #d > 0 then _G.TT3PriorityDefault = d end
+    end
+    -- Aplica a ordem canonica do Flower Hub a lista ativa e ao botao RESET,
+    -- mantendo a referencia da tabela ativa usada pelos upvalues do script.
+    if type(_G.TT3PriorityDefault) ~= "table" then _G.TT3PriorityDefault = {} end
+    table.clear(_G.TT3PriorityDefault)
+    local _activeFlowerPriority = _G.SHARED_PRIORITY_ITEMS
+    table.clear(_activeFlowerPriority)
+    for i, name in ipairs(_FLOWER_PRIORITY_ORDER) do
+        _G.TT3PriorityDefault[i] = name
+        _activeFlowerPriority[i] = name
+    end
+    _G.TT3PriVersion = (_G.TT3PriVersion or 0) + 1
+    -- LISTE PRIORITE MUTATIONS perso (editee) -> remplace la liste active EN PLACE
+    if type(merged.mutationList) == "table" then
+        local clean = {}
+        for _, v in ipairs(merged.mutationList) do
+            if type(v) == "string" and v ~= "" then clean[#clean + 1] = v end
+        end
+        if #clean > 0 then
+            local L = _G.SHARED_MUTATION_ITEMS
+            table.clear(L)
+            for i = 1, #clean do L[i] = clean[i] end
+            _G.TT3MutVersion = _G.TT3MutVersion + 1
+        end
+    end
+    if type(merged.mutationDefault) == "table" then
+        local d = {}
+        for _, v in ipairs(merged.mutationDefault) do
+            if type(v) == "string" and v ~= "" then d[#d + 1] = v end
+        end
+        if #d > 0 then _G.TT3MutationDefault = d end
+    end
+    if type(merged.invisAuto) == "boolean" then _G.TT3InvisAuto = merged.invisAuto end
+    if type(merged.invisDepth) == "number" then _G.TT3InvisDepth = math.clamp(merged.invisDepth, 0, 10) end
+    if type(merged.invisAngle) == "number" then _G.TT3InvisAngle = math.clamp(merged.invisAngle, 0, 360) end
+    if type(merged.autoTp) == "boolean" then _G.TT3AutoTP = merged.autoTp end
+    if type(merged.tpDirectlyToPet) == "boolean" then _G.TPDirectlyToPet = merged.tpDirectlyToPet end
+    if type(merged.autoBuy) == "boolean" then _G.TT3AutoBuy = merged.autoBuy end
+    if type(merged.autoBuyRange) == "number" then _G.TT3AutoBuyRange = math.clamp(merged.autoBuyRange, 5, 40) end
+    if type(merged.panelX) == "number" then _G._stp_panelX = merged.panelX end
+    if type(merged.panelY) == "number" then _G._stp_panelY = merged.panelY end
+    if type(merged.panelPos) == "table" then _G._stp_pos = merged.panelPos end
+    _G.TT3PanelVisibility = _G.TT3PanelVisibility or {}
+    if type(merged.panelVisibility) == "table" then
+        for id, value in pairs(merged.panelVisibility) do
+            if type(value) == "boolean" then _G.TT3PanelVisibility[id] = value end
+        end
+    end
+    if type(merged.autoKickOnSteal) == "boolean" then _G.TT3AutoKickOnSteal     = merged.autoKickOnSteal end
+    if type(merged.resetKey)        == "string"  then _G.TT3ResetKeyName        = merged.resetKey end
+    if type(merged.cloneKey)        == "string"  then _G.TT3CloneKeyName        = merged.cloneKey end
+    if type(merged.carpetSpeedKey)  == "string"  then _G.TT3CarpetSpeedKeyName  = merged.carpetSpeedKey end
+
+    -- TP au load: force ON + sauvegarde dans SideTP.json
+    _G.TT3AutoTP = true
+    if writefile then
+        pcall(function()
+            local t = type(fileData) == "table" and fileData or {}
+            t.autoTp = true
+            writefile("SideTP.json", _HS:JSONEncode(t))
+        end)
+    end
+end
+
+local Players    = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UIS        = game:GetService("UserInputService")
+local RS         = game:GetService("ReplicatedStorage")
+
+local LP = Players.LocalPlayer
+
+-- ===== ANTI-DIE: DEPLACE dans extras.txt (voir bloc "ANTI-DIE" la-bas) =====
+
+-- ===== lines 103-314 from hub a =====
+local _BLOCKING_MACHINE_TYPES = {
+    Fuse     = true,
+    Duel     = true,
+    Trade    = true,
+    Crafting = true,
+}
+local function _TT3IsFusing(animalData)
+    if type(animalData) ~= "table" then return false end
+    local m = animalData.Machine
+    if type(m) ~= "table" then return false end
+    return _BLOCKING_MACHINE_TYPES[m.Type] == true
+end
+
+do
+local _nf=game:GetService("ReplicatedStorage"):WaitForChild("Packages"):WaitForChild("Net")
+local _xnNetMod
+local function _xnGetNet()
+if _xnNetMod then return _xnNetMod end
+local ok,mod=pcall(require,_nf)
+if ok and type(mod)=="table" then _xnNetMod=mod end
+return _xnNetMod
+end
+local _xnGetUps=debug.getupvalues or getupvalues
+local _XNGUID="^%x%x%x%x%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%-%x%x%x%x%x%x%x%x%x%x%x%x$"
+local _xnSecret
+local function _xnFindSecret()
+local Net=_xnGetNet()
+if not Net or not _xnGetUps then return nil end
+local seen,found={},nil
+local job=game.JobId
+local function walk(t,depth)
+if depth>4 or found or seen[t] then return end
+seen[t]=true
+for _,v in pairs(t) do
+if found then return end
+local tv=typeof(v)
+if tv=="string" and #v==36 and v~=job and v:match(_XNGUID) then
+found=v
+return
+elseif tv=="table" then
+walk(v,depth+1)
+elseif tv=="function" then
+local ok,u=pcall(_xnGetUps,v)
+if ok and type(u)=="table" then walk(u,depth+1) end
+end
+end
+end
+for _,k in ipairs({"RemoteEvent","RemoteFunction","UnreliableRemoteEvent"}) do
+local f=rawget(Net,k)
+if type(f)=="function" then
+local ok,u=pcall(_xnGetUps,f)
+if ok and type(u)=="table" then walk(u,0) end
+end
+if found then break end
+end
+return found
+end
+local function _xnEncode(name)
+local job=game.JobId
+local out,idx={},1
+for i=1,#name do
+local ch=name:byte(i)
+if ch==0x2F then
+out[#out+1]="/"
+else
+local s=job:byte(((idx-1)%36)+1)%95
+out[#out+1]=string.char(((ch-0x20+s)%95)+0x20)
+idx=idx+1
+end
+end
+return table.concat(out)
+end
+local _xnSha256 do
+local bit=bit32
+local band,bor,bxor,bnot,rrotate,rshift,lshift=bit.band,bit.bor,bit.bxor,bit.bnot,bit.rrotate,bit.rshift,bit.lshift
+local K={
+0x428a2f98,0x71374491,0xb5c0fbcf,0xe9b5dba5,0x3956c25b,0x59f111f1,0x923f82a4,0xab1c5ed5,
+0xd807aa98,0x12835b01,0x243185be,0x550c7dc3,0x72be5d74,0x80deb1fe,0x9bdc06a7,0xc19bf174,
+0xe49b69c1,0xefbe4786,0x0fc19dc6,0x240ca1cc,0x2de92c6f,0x4a7484aa,0x5cb0a9dc,0x76f988da,
+0x983e5152,0xa831c66d,0xb00327c8,0xbf597fc7,0xc6e00bf3,0xd5a79147,0x06ca6351,0x14292967,
+0x27b70a85,0x2e1b2138,0x4d2c6dfc,0x53380d13,0x650a7354,0x766a0abb,0x81c2c92e,0x92722c85,
+0xa2bfe8a1,0xa81a664b,0xc24b8b70,0xc76c51a3,0xd192e819,0xd6990624,0xf40e3585,0x106aa070,
+0x19a4c116,0x1e376c08,0x2748774c,0x34b0bcb5,0x391c0cb3,0x4ed8aa4a,0x5b9cca4f,0x682e6ff3,
+0x748f82ee,0x78a5636f,0x84c87814,0x8cc70208,0x90befffa,0xa4506ceb,0xbef9a3f7,0xc67178f2}
+local function m32(x) return band(x,0xFFFFFFFF) end
+local function _bin(msg)
+local h={0x6a09e667,0xbb67ae85,0x3c6ef372,0xa54ff53a,0x510e527f,0x9b05688c,0x1f83d9ab,0x5be0cd19}
+local len=#msg
+msg=msg.."\128"
+while #msg%64~=56 do msg=msg.."\0" end
+local bl=len*8
+local lb={}
+for i=8,1,-1 do lb[i]=string.char(bl%256) bl=math.floor(bl/256) end
+msg=msg..table.concat(lb)
+for cs=1,#msg,64 do
+local w={}
+for i=0,15 do
+local a,b,c,d=string.byte(msg,cs+i*4,cs+i*4+3)
+w[i]=bor(lshift(a,24),lshift(b,16),lshift(c,8),d)
+end
+for i=16,63 do
+local x=w[i-15]
+local s0=bxor(rrotate(x,7),rrotate(x,18),rshift(x,3))
+local y=w[i-2]
+local s1=bxor(rrotate(y,17),rrotate(y,19),rshift(y,10))
+w[i]=m32(w[i-16]+s0+w[i-7]+s1)
+end
+local a,b,c,d,e,f,g,hh=h[1],h[2],h[3],h[4],h[5],h[6],h[7],h[8]
+for i=0,63 do
+local S1=bxor(rrotate(e,6),rrotate(e,11),rrotate(e,25))
+local ch=bxor(band(e,f),band(bnot(e),g))
+local t1=m32(hh+S1+ch+K[i+1]+w[i])
+local S0=bxor(rrotate(a,2),rrotate(a,13),rrotate(a,22))
+local maj=bxor(band(a,b),band(a,c),band(b,c))
+local t2=m32(S0+maj)
+hh=g g=f f=e e=m32(d+t1) d=c c=b b=a a=m32(t1+t2)
+end
+h[1]=m32(h[1]+a) h[2]=m32(h[2]+b) h[3]=m32(h[3]+c) h[4]=m32(h[4]+d)
+h[5]=m32(h[5]+e) h[6]=m32(h[6]+f) h[7]=m32(h[7]+g) h[8]=m32(h[8]+hh)
+end
+local out={}
+for i=1,8 do
+local x=h[i]
+out[i]=string.char(band(rshift(x,24),255),band(rshift(x,16),255),band(rshift(x,8),255),band(x,255))
+end
+return table.concat(out)
+end
+local _memo={}
+_xnSha256=function(s)
+local c=_memo[s]
+if c then return c end
+local ok,b=pcall(_bin,s)
+if not ok or type(b)~="string" then return nil end
+local hex=(b:gsub(".",function(ch) return string.format("%02x",string.byte(ch)) end))
+_memo[s]=hex
+return hex
+end
+end
+local function _xnHash(name)
+if not _xnSecret then return nil end
+return _xnSha256(_xnEncode(name).._xnSecret..game.JobId)
+end
+_xnSecret=_xnFindSecret()
+local _xnCache={}
+local function _get(name,kind)
+kind=(kind=="RemoteFunction" and "RemoteFunction")or(kind=="UnreliableRemoteEvent" and "UnreliableRemoteEvent")or"RemoteEvent"
+if type(name)~="string" or name=="" then return nil end
+local logical=name:match("^R[EF]/(.+)$")or name:match("^URE/(.+)$")or name
+local ck=kind.."|"..logical
+local hit=_xnCache[ck]
+if hit and hit.Parent then return hit end
+_xnCache[ck]=nil
+if not _xnSecret then _xnSecret=_xnFindSecret() end
+local h=_xnHash(logical)
+if not h then return nil end
+local p=(kind=="RemoteFunction" and "RF/")or(kind=="UnreliableRemoteEvent" and "URE/")or"RE/"
+local inst=_nf:FindFirstChild(p..h)
+if inst then
+_xnCache[ck]=inst
+return inst
+end
+return nil
+end
+_G.XenNet={
+RemoteEvent=function(_,name)return _get(name,"RemoteEvent")end,
+RemoteFunction=function(_,name)return _get(name,"RemoteFunction")end,
+UnreliableRemoteEvent=function(_,name)return _get(name,"UnreliableRemoteEvent")end,
+}
+_G.XenGetRemote=_get
+_G.Resolve=_get
+_G.HashOf=_xnHash
+_G.NetSecret=function()return _xnSecret end
+_G.__secureGetRemote=function(method,name) return _get(name,method) end
+do
+local _xnDummy=Instance.new("RemoteEvent")
+local _xnRawFire=clonefunction(_xnDummy.FireServer)
+_G.RawFire=function(name,...)
+local r=_get(name)
+if not r then return false end
+_xnRawFire(r,...)
+return true
+end
+end
+task.spawn(function()
+while true do
+task.wait(10)
+if not(_xnSecret and _get("UseItem")) then
+_xnSecret=_xnFindSecret()
+_xnCache={}
+end
+end
+end)
+end
+
+-- ===== Synchronizer ( portage 1:1 depuis sync.lua) =====
+do
+-- Synchronizer channel-registry discovery - heap identity.
+-- The probe/deepScan it replaces is dead: Synchronizer.Get has 13 upvalues and
+-- none holds channels, and a deep scan of every module function x24 upvalues x4
+-- nested slots scores 0 (measured live). No Synchronizer method is called here
+-- at all - none of its read, wait or enumerate methods, and no signal connected.
+-- Packages.Synchronizer.Channel is required purely for its class table, then
+-- every live channel is lifted off the GC heap by metatable identity. Finds
+-- channels nothing told it to look for, including the local player's own.
+-- Diagnostic in _G.TT3SyncDiag.
+local _xchan
+local _class
+local _lastSweep = 0
+local _dirty = true
+local SWEEP_GAP = 0.5
+
+local function _classTable()
+    if _class then return _class end
+    local ok, c = pcall(function()
+        return require(game:GetService("ReplicatedStorage")
+            :WaitForChild("Packages")
+            :WaitForChild("Synchronizer")
+            :WaitForChild("Channel"))
+    end)
+    if ok and type(c) == "table" then _class = c end
+    return _class
+end
+
+local function _sweep()
+    local cls = _classTable()
+    if not cls or type(getgc) ~= "function" then
+        _G.TT3SyncDiag = cls and "getgc unavailable" or "Channel class not found"
+        return
+    end
+    _lastSweep = os.clock()
+    _dirty = false
+    local reg, n = {}, 0
+    local gc = getgc(true)
+    for i = 1, #gc do
+        local v = gc[i]
+        if type(v) == "table" and getmetatable(v) == cls then
+            local idx = rawget(v, "Index")
+            if idx ~= nil then reg[idx] = v; n = n + 1 end
+        end
+    end
+    _xchan = reg
+    _G.TT3SyncDiag = string.format("heap identity - %d channels", n)
+end
+
+-- cheap: only sweeps when a plot has no channel yet, or a plot just changed
+local function _needsSweep()
+    if not _xchan then return true end
+    if _dirty then return true end
+    local pl = workspace:FindFirstChild("Plots")
+    if pl then
+        for _, p in ipairs(pl:GetChildren()) do
+            if _xchan[p.Name] == nil then return true end
+        end
+    end
+    return false
+end
+
+do
+    local pl = workspace:FindFirstChild("Plots")
+    if pl then
+        pl.ChildAdded:Connect(function() _dirty = true end)
+        pl.ChildRemoved:Connect(function() _dirty = true end)
+    end
+end
+
+local function _chans()
+    if _needsSweep() and (os.clock() - _lastSweep) > SWEEP_GAP then _sweep() end
+    return _xchan
+end
+_G.__secureChans = _chans
+
+_G.TT3SyncAll=function()return _chans()end
+_G.TT3SyncGet=function(idx)
+local t=_chans()
+if not t or idx==nil then return nil end
+local ok,cd=pcall(rawget,t,idx)
+if ok and type(cd)=="table" then return cd end
+local ok2,cd2=pcall(function() return t[idx] end)
+if ok2 and type(cd2)=="table" then return cd2 end
+return nil
+end
+-- Raw channel property read (the BYPASS): never calls channel:Get(key) -- the
+-- hookable/patched surface -- it reads CacheTable directly with rawget, falling
+-- back to plain indexing only for proxy/__index-backed registries.
+_G.sProp=function(ch,key)
+if type(ch)~="table" or key==nil then return nil end
+local ct=rawget(ch,"CacheTable")
+if type(ct)~="table" then
+local okC,c2=pcall(function() return ch.CacheTable end)
+if okC and type(c2)=="table" then ct=c2 end
+end
+if type(ct)~="table" then return nil end
+local v=rawget(ct,key)
+if 
